@@ -54,13 +54,13 @@ func (l *location) unpack() (float64, float64, float64, float64) {
 
 func (vs *Stone) location() *location {
 	s := vs.Inner
-	offsetX, offsetY := 105., 105.
+	offsetX, offsetY := float64(BoardX+5), float64(BoardY+5)
 
 	imgSize := 90.
 	if vs.Dragged {
 		imgSize = 60.
 	} else if !s.IsOnBoard() {
-		imgSize /= 2
+		imgSize = 40
 	}
 	var x1, x2, y1, y2 float64
 	switch {
@@ -71,15 +71,22 @@ func (vs *Stone) location() *location {
 	case vs.Inner.HasBeenEaten:
 		return nil
 	case vs.Inner.IsOnBoard():
-		x1, y1 = offsetX+float64(100*s.Location.X), offsetY+float64(100*s.Location.Y)
+		x1, y1 = offsetX+float64(BoardTileSize*s.Location.X), offsetY+float64(BoardTileSize*s.Location.Y)
 	default:
 		// by default it is at it starting position
-		// XXX(r-stein): We may use this to switch the location for mobile modus
-		x1 = 5.
-		if s.Player == model.Player2 {
-			x1 = offsetX + 300.
+		if !IsVertical {
+			x1 = float64(BoardX + 5)
+			if s.Player == model.Player2 {
+				x1 = offsetX + float64(BoardSize)
+			}
+			y1 = offsetY + float64(50*s.Index)
+		} else {
+			x1 = float64(BoardX + 5 + 50*s.Index)
+			y1 = float64(BoardY - 55) // 105.
+			if s.Player == model.Player2 {
+				y1 = offsetY + 300.
+			}
 		}
-		y1 = offsetY + float64(50*s.Index)
 	}
 
 	x2, y2 = x1+imgSize, y1+imgSize

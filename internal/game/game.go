@@ -10,7 +10,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-	"golang.org/x/image/colornames"
 
 	"github.com/r-stein/stapelfresser/internal/model"
 	"github.com/r-stein/stapelfresser/internal/view"
@@ -30,11 +29,13 @@ func init() {
 
 // Game is the game structure
 type Game struct {
-	Board        *model.Board
-	Stones       []*view.Stone
-	ActivePlayer model.Player
-	GameOver     bool
-	GameResult   model.GameResult
+	Board          *model.Board
+	Stones         []*view.Stone
+	ActivePlayer   model.Player
+	GameOver       bool
+	GameResult     model.GameResult
+	touchIDs       []ebiten.TouchID
+	mouseX, mouseY int
 }
 
 func New(board *model.Board) *Game {
@@ -49,6 +50,7 @@ func New(board *model.Board) *Game {
 		Stones:       stones,
 		ActivePlayer: model.Player1,
 		GameResult:   model.InProgress,
+		touchIDs:     make([]ebiten.TouchID, 0),
 	}
 }
 
@@ -69,8 +71,12 @@ func (g *Game) moveStoneToFront(s *view.Stone) {
 // last argument returns whether it is a valid field
 func field(x, y int) (int, int, bool) {
 	// so we have an offset of 100 and each field is the size of 100
-	x -= 100
-	y -= 100
+	if !view.IsVertical {
+		x -= 100
+		y -= 100
+	} else {
+		y -= 200
+	}
 	if x < 0 || y < 0 || x > 300 || y > 300 {
 		return -1, -1, false
 	}
@@ -98,42 +104,54 @@ func (g *Game) draggedStone() *view.Stone {
 	return nil
 }
 
+func (g *Game) PressAt(x, y int) {
+	g.mouseX, g.mouseY = x, y
+	s := g.draggedStone()
+	if s != nil {
+		s.Drag(x, y)
+	} else {
+		s = g.stoneAt(x, y)
+		if s != nil && s.Inner.Player == g.ActivePlayer {
+			s.StartDrag(x, y)
+			g.moveStoneToFront(s)
+		}
+	}
+}
+
+func (g *Game) Release() {
+	s := g.draggedStone()
+	if s != nil {
+		// get the field location
+		s.EndDrag()
+		x, y, valid := field(g.mouseX, g.mouseY)
+		if valid {
+			err := s.Inner.Move(x, y)
+			if err != nil {
+				slog.Info("failed to move", "err", err)
+			} else {
+				g.ActivePlayer = !g.ActivePlayer
+			}
+		}
+	}
+}
+
 func (g *Game) Update() error {
 	if g.GameResult != model.InProgress {
 		return nil
 	}
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		x, y := ebiten.CursorPosition()
-		s := g.draggedStone()
-		if s != nil {
-			s.Drag(x, y)
-		} else {
-			s = g.stoneAt(x, y)
-			if s != nil && s.Inner.Player == g.ActivePlayer {
-				s.StartDrag(x, y)
-				g.moveStoneToFront(s)
-			}
-		}
-	} else if inpututil.MouseButtonPressDuration(ebiten.MouseButtonLeft) > 0 {
-		s := g.draggedStone()
-		if s != nil {
-			s.Drag(ebiten.CursorPosition())
-		}
-	} else {
-		s := g.draggedStone()
-		if s != nil {
-			// get the field location
-			s.EndDrag()
-			x, y, valid := field(ebiten.CursorPosition())
-			if valid {
-				err := s.Inner.Move(x, y)
-				if err != nil {
-					slog.Info("failed to move", "err", err)
-				} else {
-					g.ActivePlayer = !g.ActivePlayer
-				}
-			}
-		}
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		g.PressAt(ebiten.CursorPosition())
+	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		g.Release()
+	}
+
+	wasTouched := len(g.touchIDs) > 0
+	g.touchIDs = ebiten.AppendTouchIDs(g.touchIDs[:0])
+	if len(g.touchIDs) > 0 {
+		touch := g.touchIDs[0]
+		g.PressAt(ebiten.TouchPosition(touch))
+	} else if wasTouched {
+		g.Release()
 	}
 
 	if result, over := g.Board.GameOver(); over {
@@ -148,14 +166,18 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.Gray{Y: uint8(12)})
 
-	offsetX, offsetY := 105, 105
+	// offsetX, offsetY := 100, 100
+	// if view.IsVertical {
+	// 	offsetX = 0
+	// 	offsetY = 200
+	// }
 
 	// TODO we should make the sizes variables...
 
 	// draw the info board
 	opi := &ebiten.DrawImageOptions{}
 	imi := ebiten.NewImage(200, 70)
-	opi.GeoM.Translate(150., 15)
+	opi.GeoM.Translate(float64(view.BoardX+50), 15)
 	outputText := "Player 1 turn"
 	if g.ActivePlayer == model.Player2 {
 		outputText = "Player 2 turn"
@@ -178,102 +200,26 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.DrawImage(imi, opi)
 
 	// draw the board
-	opb := &ebiten.DrawImageOptions{}
-	imb := ebiten.NewImage(300, 300)
-	opb.GeoM.Translate(100., 100.)
-	imb.Fill(colornames.Darkgray)
-	screen.DrawImage(imb, opb)
-	for y := range 3 {
-		for x := range 3 {
-			op := &ebiten.DrawImageOptions{}
-			img := ebiten.NewImage(90, 90)
-			op.GeoM.Translate(float64(offsetX+100*x), float64(offsetY+100*y)) // TODO improve
-			img.Fill(colornames.Darkslategrey)
-			screen.DrawImage(img, op)
-		}
-	}
+	view.DrawBoard(screen)
 
 	// draw each stone
-	// TODO: draw the dragged last
 	for _, vs := range g.Stones {
 		vs.Draw(screen)
 	}
-
-	// if true {
-	// 	return
-	// }
-	// loc := func(x, y int) [2]float64 {
-	// 	return [2]float64{
-	// 		float64(offsetX + 100*x),
-	// 		float64(offsetY + 100*y),
-	// 	}
-	// }
-	// for i, s := range g.Board.Stones {
-	// 	if s.IsOnBoard() {
-	// 		continue
-	// 	}
-	// 	imgSize := 45
-	// 	op := &ebiten.DrawImageOptions{}
-
-	// 	x := float64(25)
-	// 	if s.Player == model.Player2 {
-	// 		x = float64(425)
-	// 	}
-	// 	y := float64(offsetY + (i%6)*50)
-	// 	op.GeoM.Translate(x, y) // TODO improve
-
-	// 	img := ebiten.NewImage(imgSize, imgSize)
-	// 	if s.Player == model.Player1 {
-	// 		img.Fill(colornames.Darkmagenta)
-	// 	} else {
-	// 		img.Fill(colornames.Darkgreen)
-	// 	}
-
-	// 	opI := &ebiten.DrawImageOptions{}
-	// 	inSize := (s.Size + 1) * 8
-	// 	t := float64(imgSize/2 - inSize/2)
-	// 	opI.GeoM.Translate(t, t)
-	// 	imgI := ebiten.NewImage(inSize, inSize)
-	// 	imgI.Fill(color.Black)
-	// 	img.DrawImage(imgI, opI)
-
-	// 	screen.DrawImage(img, op)
-	// }
-
-	// rows := g.Board.Show()
-	// for y, row := range rows {
-	// 	for x, s := range row {
-	// 		if s != nil {
-	// 			op := &ebiten.DrawImageOptions{}
-	// 			img := ebiten.NewImage(90, 90)
-	// 			op.GeoM.Translate(loc(x, y)[0], loc(x, y)[1]) // TODO improve
-	// 			// img.Fill(color.RGBA{R: 255})
-	// 			if s.Player == model.Player1 {
-	// 				img.Fill(colornames.Darkmagenta)
-	// 			} else {
-	// 				img.Fill(colornames.Darkgreen)
-	// 			}
-	// 			opI := &ebiten.DrawImageOptions{}
-	// 			inSize := (s.Size + 1) * 16
-	// 			t := float64(90/2 - inSize/2)
-	// 			opI.GeoM.Translate(t, t)
-	// 			imgI := ebiten.NewImage(inSize, inSize)
-	// 			imgI.Fill(color.Black)
-	// 			img.DrawImage(imgI, opI)
-	// 			screen.DrawImage(img, op)
-	// 		}
-	// 	}
-	// }
-	// // if true {
-
-	// // 	op := &ebiten.DrawImageOptions{}
-	// // 	img := ebiten.NewImage(100, 100)
-	// // 	img.Fill(color.RGBA{R: 255})
-	// // 	screen.DrawImage(img, op)
-	// // }
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
+	if outsideWidth < outsideHeight {
+		view.SetIsVertical(true) // TODO check whether we should improve this
+		// 200 at top:
+		// 		100 at top and bottom for stuff
+		// 		100 at top for stones
+		// 100 at bottom for stones
+		// 50 at bottom for symmetry
+		return 330, 600
+	}
+	// 100 on top for stuff and 100 bottom for symetry
+	// 100 left and right for the stones
 	return 500, 500
 	// return outsideWidth, outsideHeight
 }
