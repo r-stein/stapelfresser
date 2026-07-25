@@ -71,16 +71,12 @@ func (g *Game) moveStoneToFront(s *view.Stone) {
 // last argument returns whether it is a valid field
 func field(x, y int) (int, int, bool) {
 	// so we have an offset of 100 and each field is the size of 100
-	if !view.IsVertical {
-		x -= 100
-		y -= 100
-	} else {
-		y -= 200
-	}
-	if x < 0 || y < 0 || x > 300 || y > 300 {
+	x -= view.BoardX
+	y -= view.BoardY
+	if x < 0 || y < 0 || x > view.BoardSize || y > view.BoardSize {
 		return -1, -1, false
 	}
-	return x / 100, y / 100, true
+	return x / view.BoardTileSize, y / view.BoardTileSize, true
 }
 
 // stoneAt returns the stone at a view location
@@ -209,8 +205,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
+	view.SetIsVertical(outsideWidth < outsideHeight)
 	if outsideWidth < outsideHeight {
-		view.SetIsVertical(true) // TODO check whether we should improve this
+		// view.SetIsVertical(true) // TODO check whether we should improve this
 		// 200 at top:
 		// 		100 at top and bottom for stuff
 		// 		100 at top for stones

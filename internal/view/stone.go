@@ -60,7 +60,7 @@ func (vs *Stone) location() *location {
 	if vs.Dragged {
 		imgSize = 60.
 	} else if !s.IsOnBoard() {
-		imgSize = 40
+		imgSize = 45.
 	}
 	var x1, x2, y1, y2 float64
 	switch {
@@ -75,16 +75,16 @@ func (vs *Stone) location() *location {
 	default:
 		// by default it is at it starting position
 		if !IsVertical {
-			x1 = float64(BoardX + 5)
+			x1 = float64(BoardX - 50)
 			if s.Player == model.Player2 {
 				x1 = offsetX + float64(BoardSize)
 			}
 			y1 = offsetY + float64(50*s.Index)
 		} else {
-			x1 = float64(BoardX + 5 + 50*s.Index)
+			x1 = float64(BoardX+50*s.Index) + 2.5
 			y1 = float64(BoardY - 55) // 105.
 			if s.Player == model.Player2 {
-				y1 = offsetY + 300.
+				y1 = offsetY + float64(BoardSize)
 			}
 		}
 	}
@@ -129,9 +129,9 @@ func (vs *Stone) Draw(screen *ebiten.Image) {
 	// offsetX, offsetY := 105, 105
 
 	s := vs.Inner
-	col := colornames.Darkmagenta
+	col := colornames.Darkgreen
 	if s.Player == model.Player2 {
-		col = colornames.Darkgreen
+		col = colornames.Darkmagenta
 	}
 	loc := vs.location()
 	if loc == nil {
