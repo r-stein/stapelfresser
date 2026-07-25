@@ -1,79 +1,103 @@
 package model
 
-import (
-	"errors"
-	"fmt"
-)
-
 type Board struct {
 	Width, Height int
-	stones        []Stone
+	Stones        []*Stone
 }
 
 func NewBoard() *Board {
-	return &Board{
+	st := make([]*Stone, 0, 6)
+	b := &Board{
 		Width:  3,
 		Height: 3,
-		stones: []Stone{},
+		Stones: st,
 	}
+	for _, p := range []Player{false, true} {
+		for s := range 3 {
+			b.Stones = append(b.Stones, &Stone{Board: b, Player: p, Size: s, Index: s * 2})
+			b.Stones = append(b.Stones, &Stone{Board: b, Player: p, Size: s, Index: s*2 + 1})
+		}
+	}
+	return b
 }
 
 func (b *Board) Search(x, y int) *Stone {
-	for _, s := range b.stones {
+	for _, s := range b.Stones {
 		if s.At(x, y) && !s.HasBeenEaten {
-			return &s
+			return s
 		}
 	}
 	return nil
 }
 
-// Stone is stone on the board
-type Stone struct {
-	Board  *Board
-	Player Player
-	Size   int
-	// HasBeenEaten signals whether the stone has been eatn
-	HasBeenEaten bool
-	Location     *Location
-}
+type GameResult int
 
-// IsOnBoard return whether the stone is on the board
-func (s *Stone) IsOnBoard() bool {
-	return s.Location != nil
-}
+const (
+	InProgress GameResult = iota
+	Tie
+	Player1Win
+	Player2Win
+	Unknown
+)
 
-func (s *Stone) At(x, y int) bool {
-	if !s.IsOnBoard() {
-		return false
+func samePlayer(a, b, c *Stone) (GameResult, bool) {
+	if a == nil || b == nil || c == nil {
+		return Unknown, false
 	}
-	return s.Location.x == x && s.Location.y == y
-}
-
-func (s *Stone) GetEaten() error {
-	if !s.IsOnBoard() {
-		return errors.New("you can not eat a stone that is not on the board")
-	}
-	s.Location = nil
-	s.HasBeenEaten = true
-	return nil
-}
-
-func (s *Stone) Move(x, y int) error {
-	if x > s.Board.Width || y > s.Board.Width {
-		return errors.New("out of board size")
-	}
-	other := s.Board.Search(x, y)
-	if other != nil {
-		if other.Size >= s.Size {
-			return fmt.Errorf("can not eat other stone, size: %d, other size: %d", s.Size, other.Size)
-		}
-		err := other.GetEaten()
-		if err != nil {
-			return fmt.Errorf("eating other stone: %w", err)
+	same := a.Player == b.Player && a.Player == c.Player
+	result := Unknown
+	if same {
+		result = Player1Win
+		if a.Player == Player2 {
+			result = Player2Win
 		}
 	}
-	s.Location = &Location{x, y}
-	return nil
+	return result, same
+}
+
+func (b *Board) GameOver() (GameResult, bool) {
+	stones := b.stones()
+	for i := range 3 {
+		if winner, same := samePlayer(stones[0][i], stones[1][i], stones[2][i]); same {
+			return winner, true
+		}
+		if winner, same := samePlayer(stones[i][0], stones[i][1], stones[i][2]); same {
+			return winner, true
+		}
+	}
+	if winner, same := samePlayer(stones[0][0], stones[1][1], stones[2][2]); same {
+		return winner, true
+	}
+	if winner, same := samePlayer(stones[0][2], stones[1][1], stones[2][0]); same {
+		return winner, true
+	}
+	// if no player has 3 stones the game is tied, this happens if we only have 4 stones on the field
+	c := 0
+	for _, s := range b.Stones {
+		if !s.HasBeenEaten {
+			c += 1
+		}
+		if c > 4 {
+			break
+		}
+	}
+	if c == 4 {
+		return Tie, true
+	}
+	return InProgress, false
+}
+
+func (b *Board) stones() [][]*Stone {
+	rows := make([][]*Stone, 0, b.Height)
+	for range b.Width {
+		rows = append(rows, make([]*Stone, b.Height))
+	}
+	for _, s := range b.Stones {
+		if s.IsOnBoard() {
+			rows[s.Location.X][s.Location.Y] = s
+		}
+	}
+	return rows
 }
 
 // Player is the first (false) or second player (true)
@@ -86,5 +110,5 @@ const (
 
 // Location is the location on the board
 type Location struct {
-	x, y int
+	X, Y int
 }
