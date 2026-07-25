@@ -9,13 +9,13 @@ var BoardY int = 100
 const BoardTileSize int = 100
 const BoardSize int = 300
 
-func SetIsVertical(vertical bool) {
+func SetIsVertical(vertical bool, xBuffer, yBuffer int) {
 	IsVertical = vertical
 	if vertical {
-		BoardX = 0
-		BoardY = 200
+		BoardX = 0 + xBuffer
+		BoardY = 200 + yBuffer
 	} else {
-		BoardX = 100
-		BoardY = 100
+		BoardX = 100 + xBuffer
+		BoardY = 100 + yBuffer
 	}
 }

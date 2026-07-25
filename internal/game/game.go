@@ -205,8 +205,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	view.SetIsVertical(outsideWidth < outsideHeight)
 	if outsideWidth < outsideHeight {
+		view.SetIsVertical(true, 15, 0)
 		// view.SetIsVertical(true) // TODO check whether we should improve this
 		// 200 at top:
 		// 		100 at top and bottom for stuff
@@ -215,6 +215,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 		// 50 at bottom for symmetry
 		return 330, 600
 	}
+	view.SetIsVertical(false, 0, 0)
 	// 100 on top for stuff and 100 bottom for symetry
 	// 100 left and right for the stones
 	return 500, 500
